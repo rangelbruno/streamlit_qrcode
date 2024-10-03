@@ -1,5 +1,6 @@
 import streamlit as st
 import cv2
+from pyzbar.pyzbar import decode
 from PIL import Image
 import numpy as np
 import pandas as pd
@@ -20,7 +21,7 @@ def main():
     elif option == "Upload de imagem":
         run_image_upload()
 
-# Função para capturar o QR Code da webcam usando OpenCV
+# Função para capturar o QR Code da webcam
 def run_webcam():
     run = st.checkbox('Ativar webcam')
     if run:
@@ -34,15 +35,17 @@ def run_webcam():
                 img = Image.fromarray(frame)
                 stframe.image(img)
 
-                # Decodificar o QR Code usando OpenCV
-                qr_data = detect_qr_code(frame)
-                if qr_data:
-                    st.success("QR Code detectado:")
-                    data_dict = display_qr_data(qr_data)
-                    if data_dict:
-                        display_custom_table(data_dict)
-                        generate_excel(data_dict)
-                    break  # Para evitar múltiplas leituras, parar após o primeiro QRCode detectado
+                # Decodificar o QR Code
+                decoded_objects = decode(frame)
+                if decoded_objects:
+                    for obj in decoded_objects:
+                        qr_data = obj.data.decode("utf-8")
+                        st.success("QR Code detectado:")
+                        data_dict = display_qr_data(qr_data)
+                        if data_dict:
+                            display_custom_table(data_dict)
+                            generate_excel(data_dict)
+                        break  # Para evitar múltiplas leituras, parar após o primeiro QRCode detectado
 
                 if not run:
                     break
@@ -75,23 +78,17 @@ def run_image_upload():
         image_np = np.array(image)
         
         # Decodificar o QR Code
-        qr_data = detect_qr_code(image_np)
-        if qr_data:
-            st.success("QR Code detectado:")
-            data_dict = display_qr_data(qr_data)
-            if data_dict:
-                display_custom_table(data_dict)
-                generate_excel(data_dict)
+        decoded_objects = decode(image_np)
+        if decoded_objects:
+            for obj in decoded_objects:
+                qr_data = obj.data.decode("utf-8")
+                st.success("QR Code detectado:")
+                data_dict = display_qr_data(qr_data)
+                if data_dict:
+                    display_custom_table(data_dict)
+                    generate_excel(data_dict)
         else:
             st.warning("Nenhum QR Code detectado na imagem.")
-
-# Função para detectar e decodificar QR Codes usando OpenCV
-def detect_qr_code(image):
-    detector = cv2.QRCodeDetector()
-    data, points, _ = detector.detectAndDecode(image)
-    if points is not None:
-        return data
-    return None
 
 # Função para exibir os dados do QRCode de forma organizada
 def display_qr_data(qr_data):
