@@ -1,69 +1,18 @@
 import streamlit as st
-import cv2
-from pyzbar.pyzbar import decode
 from PIL import Image
 import numpy as np
+import requests
 import pandas as pd
 import io
 
 def main():
     st.title("Leitor de QRCode - Boletim de Urna Eletrônica")
 
-    # Opções de entrada: Webcam, Leitor de código de barras, Upload de arquivo
-    option = st.selectbox("Escolha o método para ler o QR Code:", ("Webcam", "Leitor de código de barras", "Upload de imagem"))
+    # Opções de entrada: Upload de imagem
+    option = st.selectbox("Escolha o método para ler o QR Code:", ("Upload de imagem",))
 
-    if option == "Webcam":
-        run_webcam()
-
-    elif option == "Leitor de código de barras":
-        run_barcode_reader()
-
-    elif option == "Upload de imagem":
+    if option == "Upload de imagem":
         run_image_upload()
-
-# Função para capturar o QR Code da webcam
-def run_webcam():
-    run = st.checkbox('Ativar webcam')
-    if run:
-        video_capture = cv2.VideoCapture(0)
-        stframe = st.empty()
-
-        while run:
-            ret, frame = video_capture.read()
-            if ret:
-                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                img = Image.fromarray(frame)
-                stframe.image(img)
-
-                # Decodificar o QR Code
-                decoded_objects = decode(frame)
-                if decoded_objects:
-                    for obj in decoded_objects:
-                        qr_data = obj.data.decode("utf-8")
-                        st.success("QR Code detectado:")
-                        data_dict = display_qr_data(qr_data)
-                        if data_dict:
-                            display_custom_table(data_dict)
-                            generate_excel(data_dict)
-                        break  # Para evitar múltiplas leituras, parar após o primeiro QRCode detectado
-
-                if not run:
-                    break
-
-        video_capture.release()
-        cv2.destroyAllWindows()
-
-# Função para ler o QR Code via leitor de código de barras
-def run_barcode_reader():
-    qr_data = st.text_input("Escaneie o QRCode usando o leitor de código de barras:")
-    if qr_data:
-        st.success("QR Code detectado:")
-        data_dict = display_qr_data(qr_data)
-        if data_dict:
-            display_custom_table(data_dict)
-            generate_excel(data_dict)
-    else:
-        st.warning("Aguardando leitura do QR Code...")
 
 # Função para upload de uma imagem contendo o QR Code
 def run_image_upload():
@@ -74,21 +23,36 @@ def run_image_upload():
         image = Image.open(uploaded_file)
         st.image(image, caption="Imagem carregada", use_column_width=True)
 
-        # Converter a imagem para o formato OpenCV
-        image_np = np.array(image)
-        
-        # Decodificar o QR Code
-        decoded_objects = decode(image_np)
-        if decoded_objects:
-            for obj in decoded_objects:
-                qr_data = obj.data.decode("utf-8")
-                st.success("QR Code detectado:")
-                data_dict = display_qr_data(qr_data)
-                if data_dict:
-                    display_custom_table(data_dict)
-                    generate_excel(data_dict)
+        # Converter a imagem para o formato PNG para enviar à API
+        image.save("temp_image.png", "PNG")
+
+        # Enviar a imagem para a API zxing e decodificar o QR Code
+        qr_data = decode_qr_code("temp_image.png")
+        if qr_data:
+            st.success("QR Code detectado:")
+            data_dict = display_qr_data(qr_data)
+            if data_dict:
+                display_custom_table(data_dict)
+                generate_excel(data_dict)
         else:
             st.warning("Nenhum QR Code detectado na imagem.")
+
+# Função para enviar a imagem para a API zxing e decodificar
+def decode_qr_code(image_path):
+    url = 'http://api.qrserver.com/v1/read-qr-code/'
+    with open(image_path, 'rb') as f:
+        files = {'file': f}
+        response = requests.post(url, files=files)
+    
+    if response.status_code == 200:
+        json_data = response.json()
+        try:
+            qr_data = json_data[0]['symbol'][0]['data']
+            return qr_data
+        except:
+            return None
+    else:
+        return None
 
 # Função para exibir os dados do QRCode de forma organizada
 def display_qr_data(qr_data):
